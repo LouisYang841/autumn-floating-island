@@ -1,0 +1,909 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#ead8cd">
+  <meta name="description" content="Three.js 体素秋日浮岛：拖动右上角24小时圆形时间环，看阳光、阴影和天空随日出日落变化；包含动态水波、移轴景深和风动画。">
+  <title>秋日浮岛 | Three.js 3D Pixel World</title>
+  <style>
+    :root {--ink:#4b302a;--muted:#8c7064;--accent:#d87939;--glass:rgba(255,251,242,.81);--line:rgba(103,71,54,.15)}
+    *{box-sizing:border-box}html,body{width:100%;min-height:100%;margin:0}
+    body{overflow:hidden;font-family:Inter,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);background:radial-gradient(ellipse 70% 72% at 52% 42%,#f5e8db 0%,#ecd9cd 60%,#e4cdbf 100%);-webkit-font-smoothing:antialiased;transition:background .45s,color .45s}
+    body.night{--ink:#f6ded3;--muted:#c9b3c2;--glass:rgba(47,48,76,.76);--line:rgba(250,235,255,.15);background:radial-gradient(ellipse at 50% 40%,#424762 0%,#272e48 70%,#1e253e 100%)}
+    #scene{position:fixed;inset:0;display:block;width:100%;height:100%;touch-action:none;cursor:grab;outline:none}
+    #scene:active{cursor:grabbing}#scene:focus-visible{outline:2px solid #e99556;outline-offset:-4px}
+    .grain{pointer-events:none;position:fixed;inset:0;opacity:.33;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.065' filter='url(%23n)'/%3E%3C/svg%3E")}
+    .header{position:fixed;top:34px;left:42px;right:42px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;gap:16px}
+    .brand{display:flex;align-items:center;gap:12px}.mark{display:grid;place-items:center;width:41px;height:41px;border-radius:13px;background:#f57a30;box-shadow:0 8px 22px #b9683a29}.mark svg{width:24px;height:24px;stroke:white;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round}
+    .brand-kicker{font-size:10px;letter-spacing:.21em;font-weight:800;color:#b8673d;margin-bottom:5px}.brand-title{font-size:20px;font-weight:800;letter-spacing:.075em;line-height:1}
+    .status{background:var(--glass);border:1px solid var(--line);padding:11px 15px;border-radius:100px;display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.15em;font-weight:800;color:#9e663f;backdrop-filter:blur(10px)}.status-dot{width:7px;height:7px;border-radius:100%;background:#83ae4a;box-shadow:0 0 0 4px #8bab4b25}
+    .hero{position:fixed;left:43px;bottom:40px;max-width:370px;pointer-events:none}.eyebrow{font-size:10px;font-weight:850;letter-spacing:.24em;color:#b87956;margin-bottom:15px}.hero h1{margin:0 0 16px;font-family:Georgia,"Noto Serif SC","Songti SC",serif;font-weight:750;line-height:1.22;font-size:clamp(34px,3.5vw,51px);letter-spacing:.018em}.hero h1 em{color:var(--accent);font-style:normal}.hero p{margin:0 0 22px;max-width:320px;font-size:13px;letter-spacing:.03em;line-height:1.95;color:var(--muted)}.rule{width:59px;height:1px;background:linear-gradient(90deg,#99776767,transparent);margin-bottom:18px}
+    .buttons{display:flex;gap:9px;flex-wrap:wrap;pointer-events:auto;max-width:365px}button{font:inherit;appearance:none;cursor:pointer;transition:transform .15s,background .2s,border-color .2s}button:hover{transform:translateY(-2px)}button:active{transform:translateY(0)}button:focus-visible{outline:3px solid #f2a477;outline-offset:3px}
+    .button{display:inline-flex;gap:8px;align-items:center;background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:11px 13px;color:var(--ink);font-weight:700;font-size:12px;white-space:nowrap;backdrop-filter:blur(12px);box-shadow:0 9px 21px #6941270a}.button.active{background:#694638;border-color:#694638;color:#fff}.button svg{width:16px;height:16px;flex-shrink:0;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round}
+    .right-note{position:fixed;right:43px;top:111px;text-align:right;pointer-events:none;color:#bb9988;font-size:9px;line-height:1.9;letter-spacing:.16em;font-weight:800}.footer-hint{display:none;position:fixed;right:43px;bottom:40px;gap:11px;align-items:center;color:#a48a7c;pointer-events:none;font-size:11px;line-height:1.65}.hint-icon{width:31px;height:31px;display:grid;place-items:center;border:1px solid #b59b8b77;border-radius:10px;font-size:18px}.footer-hint strong{font-size:12px;color:#816456;display:block}
+    /* Compact circular 24-hour dial: midnight at 12 o'clock, increasing clockwise. */
+    .time-panel{position:fixed;z-index:3;right:39px;top:106px;width:164px;display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none}
+    .time-dial{--ring-color:#e99657;position:relative;width:158px;height:158px;border-radius:50%;background:var(--glass);border:1px solid var(--line);box-shadow:0 12px 28px #57362320;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);pointer-events:auto;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;outline:none}
+    .time-dial:active{cursor:grabbing}.time-dial:focus-visible{outline:3px solid #e99657;outline-offset:3px}
+    .time-dial svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+    .dial-track{fill:none;stroke:rgba(136,105,91,.19);stroke-width:8}
+    .dial-progress{fill:none;stroke:var(--ring-color);stroke-width:8;stroke-linecap:round;transform:rotate(-90deg);transform-origin:90px 90px;transition:stroke .35s}
+    .dial-knob{fill:var(--ring-color);stroke:#fff9f1;stroke-width:3.5;filter:drop-shadow(0 2px 3px #4f312555);transition:fill .35s}
+    .dial-tick{fill:rgba(132,99,87,.44)}
+    .time-readout{pointer-events:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;line-height:1}
+    .time-clock{font-size:27px;font-weight:850;letter-spacing:-.04em;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
+    .time-icon{font-size:19px;line-height:1.1}
+    .time-control{pointer-events:auto;width:124px;min-height:37px;padding:8px 10px;background:var(--glass);border:1px solid var(--line);border-radius:999px;color:var(--ink);font-size:12px;font-weight:800;letter-spacing:.05em;box-shadow:0 6px 18px #57362312;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+    .time-control:hover{background:rgba(245,218,188,.95)}
+    .night .time-dial{--ring-color:#e8ad90}.night .dial-track{stroke:rgba(237,222,235,.22)}.night .dial-tick{fill:rgba(238,222,232,.4)}.night .time-control:hover{background:rgba(87,79,103,.95)}
+    .stars{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .5s}.night .stars{opacity:1}.stars i{position:absolute;display:block;width:2px;height:2px;background:#f2e5d6;border-radius:50%;opacity:.55;box-shadow:0 0 9px #fff7}
+    .night .brand-kicker,.night .eyebrow{color:#efa477}.night .hero h1 em{color:#ffae75}.night .button.active{background:#c78162;border-color:#c78162}.night .status{color:#ead0c3}.night .footer-hint strong{color:#ebd7cc}.night .right-note{color:#aca0b5}
+    .loading{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff8eecf;color:#805848;border:1px solid #e1c7b3;border-radius:14px;padding:15px 20px;font-size:13px;font-weight:650;z-index:4;pointer-events:none;opacity:1;transition:opacity .5s}.loading.off{opacity:0}.loading.error{max-width:min(420px,calc(100vw - 42px));pointer-events:auto;line-height:1.8;text-align:center}
+    @media(max-width:1160px){.time-panel{right:22px;top:96px}.hero{max-width:330px}.hero h1{font-size:38px}}
+    @media(max-width:850px){.time-panel{right:21px;top:86px}.header{left:24px;right:24px;top:23px}.hero{left:25px;bottom:30px}.footer-hint,.right-note{display:none}.hero h1{font-size:36px}}
+    @media(max-width:560px){.header{top:17px;left:18px;right:18px}.brand-kicker{font-size:8px}.brand-title{font-size:17px}.mark{height:36px;width:36px;border-radius:10px}.status{font-size:8px;padding:9px 10px;letter-spacing:.04em}.time-panel{right:15px;top:75px;width:146px;gap:7px}.time-dial{width:140px;height:140px}.time-clock{font-size:24px}.time-icon{font-size:17px}.time-control{width:112px;min-height:35px;padding:7px 9px;font-size:11px}.hero{left:19px;right:19px;bottom:calc(24px + env(safe-area-inset-bottom));max-width:330px}.hero h1{font-size:29px;margin-bottom:9px}.hero p,.hero .rule,.hero .eyebrow{display:none}.hero .buttons{max-width:330px}.button{font-size:11px;padding:9px 10px;gap:6px;border-radius:10px}.buttons{gap:6px}.button svg{height:14px;width:14px}}
+    @media(max-width:355px){.status{display:none}.time-panel{right:10px;top:69px;width:134px}.time-dial{width:132px;height:132px}.time-clock{font-size:23px}.hero h1{font-size:24px}}
+    @media(prefers-reduced-motion:reduce){button{transition:none}body{transition:none}}
+  </style>
+  <script type="importmap">
+  {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}
+  </script>
+</head>
+<body>
+  <canvas id="scene" tabindex="0" aria-label="可拖拽旋转、双指缩放的 Three.js 像素风浮空岛"></canvas>
+  <div class="grain"></div><div class="stars" id="stars"></div>
+  <header class="header"><div class="brand"><div class="mark"><svg viewBox="0 0 24 24"><path d="m12 2 8.5 4.9v10.2L12 22l-8.5-4.9V6.9L12 2Z"/><path d="m3.5 7 8.5 5 8.5-5M12 12v10"/></svg></div><div><div class="brand-kicker">THREE.JS · VOXEL DIORAMA</div><div class="brand-title">秋日浮岛</div></div></div><div class="status"><span class="status-dot"></span> LIVE 3D SCENE</div></header>
+  <section class="hero"><div class="eyebrow">A LITTLE WORLD IN AUTUMN</div><h1>把秋天，<br>装进一座<em>小岛</em>。</h1><p>一棵长在池塘中央的大树，一圈闪烁的清澈池水。<br>拖动看看，发现藏在方块里的秋天。</p><div class="rule"></div><div class="buttons">
+    <button class="button" id="rotateBtn" type="button" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.8-4.1L3 9m0-5v5h5M4 13a8 8 0 0 0 14.8 4.1L21 15m0 5v-5h-5"/></svg>自动旋转</button>
+    <button class="button active" id="leafBtn" type="button" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M20 4c-11 0-16 4-16 11a5 5 0 0 0 5 5c7 0 11-5 11-16ZM5 19l11-11"/></svg>飘落树叶</button>
+    <button class="button" id="nightBtn" type="button" aria-pressed="false" title="跳到夜晚或白天"><svg viewBox="0 0 24 24"><path d="M20.5 14.5A9 9 0 0 1 9.5 3.5 9 9 0 1 0 20.5 14.5Z"/></svg><span id="nightLabel">跳至夜晚</span></button>
+    <button class="button active" id="dofBtn" type="button" aria-pressed="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>移轴景深</button>
+    <button class="button" id="resetBtn" type="button"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 2.6-6.4M3 4v5h5"/></svg>重置视角</button>
+  </div></section>
+  <section class="time-panel" aria-label="日出日落时间控制">
+    <div class="time-dial" id="timeDial" role="slider" tabindex="0" aria-label="24小时圆形时间滑块：顺时针调整时间" aria-valuemin="0" aria-valuemax="1439" aria-valuenow="570" aria-valuetext="09:30 上午 · 柔和日光" title="沿圆环拖动调整时间，方向键也可微调">
+      <svg viewBox="0 0 180 180" aria-hidden="true">
+        <circle class="dial-track" cx="90" cy="90" r="69" />
+        <circle class="dial-progress" id="timeArc" cx="90" cy="90" r="69" stroke-dasharray="171.6 433.54" />
+        <circle class="dial-tick" cx="90" cy="8" r="2" /><circle class="dial-tick" cx="172" cy="90" r="2" />
+        <circle class="dial-tick" cx="90" cy="172" r="2" /><circle class="dial-tick" cx="8" cy="90" r="2" />
+        <circle class="dial-knob" id="timeKnob" cx="132.0" cy="144.7" r="7" />
+      </svg>
+      <div class="time-readout"><span class="time-clock" id="timeClock" role="timer" aria-live="off">09:30</span><span class="time-icon" id="timeIcon" aria-hidden="true">☀️</span></div>
+    </div>
+    <button class="time-control" type="button" id="timePlayBtn" aria-pressed="true">Ⅱ 暂停</button>
+  </section>
+  <div class="footer-hint"><div class="hint-icon">↔</div><div><strong>探索这座小岛</strong>鼠标拖拽旋转 · 滚轮缩放</div></div>
+  <div class="loading" id="loading">正在搭建方块世界…</div>
+  <script>
+    // Show a helpful message if the Three.js CDN cannot be reached.
+    window.__voxelReady = false;
+    setTimeout(()=>{if(!window.__voxelReady){const l=document.getElementById('loading');l.classList.add('error');l.textContent='Three.js 加载失败。请连接网络后刷新页面（本演示通过 CDN 加载 Three.js）。';}},9000);
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    // A camera-following screen-space tilt-shift replaces the old depth-texture DOF.
+    // The gradient backdrop is rendered into the scene so post effects never reveal black.
+    const canvas=document.getElementById('scene');
+    const loading=document.getElementById('loading');
+    let renderer;
+    try{renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'high-performance',preserveDrawingBuffer:false});}
+    catch(err){loading.textContent='浏览器无法创建 WebGL 画布，请开启硬件加速并使用新版浏览器。';loading.classList.add('error');throw err;}
+    renderer.setClearColor(0x000000,0);
+    renderer.outputColorSpace=THREE.SRGBColorSpace;
+    renderer.toneMapping=THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure=1.25;
+    renderer.shadowMap.enabled=true;
+    renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+    const compactScreen=window.matchMedia('(max-width:650px)').matches;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,compactScreen?1.45:1.85));
+    const scene=new THREE.Scene();
+    // Keeping the sky IN the render target eliminates dark/black transparency
+    // artifacts at blurred silhouettes and avoids mismatches with CSS gradients.
+    const backdropCanvas=document.createElement('canvas');
+    backdropCanvas.width=512;backdropCanvas.height=512;
+    const backdropContext=backdropCanvas.getContext('2d');
+    const backdropTexture=new THREE.CanvasTexture(backdropCanvas);
+    backdropTexture.colorSpace=THREE.SRGBColorSpace;
+    backdropTexture.minFilter=THREE.LinearFilter;
+    backdropTexture.magFilter=THREE.LinearFilter;
+    scene.background=backdropTexture;
+    function paintBackdrop(center,mid,edge){
+      const ctx=backdropContext,side=backdropCanvas.width;
+      ctx.fillStyle=edge.getStyle();ctx.fillRect(0,0,side,side);
+      ctx.save();ctx.translate(side*.52,side*.43);ctx.scale(1.03,1.10);
+      const radial=ctx.createRadialGradient(0,0,0,0,0,side*.79);
+      radial.addColorStop(0,center.getStyle());radial.addColorStop(.60,mid.getStyle());radial.addColorStop(1,edge.getStyle());
+      ctx.fillStyle=radial;ctx.fillRect(-side,-side,side*2,side*2);
+      ctx.restore();backdropTexture.needsUpdate=true;
+    }
+    // A long-lens perspective camera preserves the gentle isometric look while
+    // providing real camera-space depth for the bokeh (depth-of-field) pass.
+    const camera=new THREE.PerspectiveCamera(35,1,.1,100);
+    const controls=new OrbitControls(camera,renderer.domElement);
+    controls.enableDamping=true;controls.dampingFactor=.075;
+    controls.enablePan=false;controls.minPolarAngle=.22;controls.maxPolarAngle=1.44;
+    controls.minDistance=16;controls.maxDistance=43;
+    controls.rotateSpeed=.7;controls.zoomSpeed=.87;
+    const initialOffset=new THREE.Vector3(15,13.5,19);
+    const target=new THREE.Vector3(0,2.55,0);
+    controls.target.copy(target);camera.position.copy(target).add(initialOffset);camera.lookAt(target);controls.update();
+
+// Procedurally constructed voxel world: thousands of uniquely colored cubes.
+let seed = 40924;
+const rnd=()=>{seed=(Math.imul(seed,1664525)+1013904223)|0;return (seed>>>0)/4294967296;};
+const random=(a,b)=>a+(b-a)*rnd();
+const choice=a=>a[Math.floor(rnd()*a.length)];
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const hex=(h)=>[(h>>16&255)/255,(h>>8&255)/255,(h&255)/255];
+const palette={
+ green:['#70bd18','#80cc22','#8fd82b','#9bdb30','#69af1b','#a5dc3e'],
+ edge:['#74bd17','#80c51c','#96d229'],
+ dirt:['#561b2b','#642030','#702337','#4b182a','#7d3130','#5b1727'],
+ dirtBright:['#89383b','#79302e','#70232b'],
+ wood:['#60202b','#761f2e','#8a282d','#a33b2a','#4b1728'],
+ leafBottom:['#aa2d10','#b6340c','#c83a0b','#df4b0a','#f05a09'],
+ leafMiddle:['#d64308','#ef5707','#ff6e05','#ff7b0b','#f2690a'],
+ leafUpper:['#f67506','#ff8207','#ff9608','#ffa815','#f98b04'],
+ leafTop:['#ff9707','#ffaf0a','#ffbb14','#ffc522','#f58e03'],
+ flower:['#f64f60','#e5295c','#ffda4c','#fff6a7','#e878d7'],
+ water:['#15adb2','#1cbdca','#23cad3','#22b2c1','#52d5d4','#31aab7'],
+ rock:['#dbc47c','#cbb67e','#e5d29b','#ad9f70','#f0dfad']
+};
+for (const key in palette) palette[key]=palette[key].map(s=>hex(parseInt(s.slice(1),16)));
+
+const cubes=[]; const waterTiles=[];
+const swayGroups=[];const swayBoxes=[];
+// All pieces of a plant / dangling strand rotate around one real attachment
+// point, so nothing separates from the grass or canopy during animation.
+function makeSwayGroup(x,y,z,kind){
+ const group={x,y,z,kind,begin:swayBoxes.length,count:0,phase:random(0,Math.PI*2),speed:random(.72,1.23),strength:random(.75,1.20)};
+ swayGroups.push(group);return group;
+}
+function swayBox(group,x,y,z,w,h,d,color){
+ const c=typeof color==='string'?hex(parseInt(color.slice(1),16)):color;
+ swayBoxes.push({x:x-group.x,y:y-group.y,z:z-group.z,w,h,d,c});group.count++;
+}
+function box(x,y,z,w,h,d,color) {const c=typeof color==='string'?hex(parseInt(color.slice(1),16)):color; cubes.push(x,y,z,w,h,d,c[0],c[1],c[2]);}
+function pbox(x,y,z,w,h,d,pal){box(x,y,z,w,h,d,choice(palette[pal]));}
+// A genuine closed pond encircles the tree on a raised grassy islet.
+// Slight sinusoidal offsets keep the shore natural without breaking the loop.
+function pondMetric(x,z){
+ const theta=Math.atan2(z,x);
+ const r=Math.hypot(x/1.035,z/.94);
+ const ring=2.96+.13*Math.sin(theta*3.0+.5)+.12*Math.cos(theta*5.0-.8);
+ return Math.abs(r-ring);
+}
+function channelMetric(x,z){
+ // A small spillway carries water from the front of the ring to the waterfall.
+ if(z<2.47)return 99;
+ const curve=-1.35-.12*Math.sin((z-2.4)*1.3);
+ return Math.abs(x-curve);
+}
+function waterDist(x,z){return Math.min(pondMetric(x,z),channelMetric(x,z));}
+const unit=.30,N=34,extent=N*unit/2;
+let grid=[];
+for(let i=0;i<N;i++) for(let j=0;j<N;j++) {
+ const x=(i+.5)*unit-extent,z=(j+.5)*unit-extent;
+ let on=true;
+ if ((i===0||i===N-1||j===0||j===N-1) && rnd()<.12) on=false;
+ if (((i<2||i>N-3)&&(j<2||j>N-3)) && rnd()<.35) on=false;
+ if(!on)continue;
+ const edge=(i<2||i>N-3||j<2||j>N-3);
+ const wd=waterDist(x,z);
+ const water=wd<(.56+.045*Math.sin(x*2.9-z*2.2));
+ const shore=!water && wd<.78;
+ const soil=choice(palette.dirt);
+ // The bottom of the pond is genuinely recessed; water is separate geometry.
+ // Dirt top ends exactly at y=0, grass/stone begins at y>=0.
+ // No overlapping coplanar outer vertical faces: prevents Z-fighting along the rim.
+ box(x,water?-.80:-.75,z,unit*.996,water?1.34:1.50,unit*.996,soil);
+ if(edge&&rnd()<.27)box(x,-1.57,z,unit*.99,random(.25,.84),unit*.99,choice(palette.dirtBright));
+ if(water){
+   box(x,-.072,z,unit*.99,.075,unit*.99,'#196b72');
+   waterTiles.push({x,z,tint:random(.86,1.13),phase:random(0,6.28)});
+ } else if(shore){
+   box(x,.105,z,unit*.996,.208,unit*.996,choice(palette.rock));
+   if(rnd()<.50)box(x,.242,z,unit*.81,.052,unit*.81,choice(palette.green));
+ } else {
+   box(x,.11,z,unit*.996,.22,unit*.996,choice(palette.green));
+ }
+ grid.push({x,z,edge,water,shore,wd});
+}
+// Extra soil blocks and hanging moss under the island's rugged perimeter.
+for(const tile of grid){
+ if(!tile.edge)continue;
+ const {x,z}=tile;
+ if(rnd()<.18) box(x,random(-1.65,-1.48),z,.23,random(.32,.79),.23,choice(palette.dirt));
+ if(rnd()<.27){
+   const length=random(.3,1.65),tx=x+random(-.07,.07),tz=z+random(-.07,.07);
+   box(tx,-.12-length/2,tz,random(.045,.10),length,random(.05,.11),choice(palette.edge));
+   if(rnd()<.5)box(tx,-.12-length-.1,tz,.10,.19,.11,choice(palette.edge));
+ }
+}
+// Voxel waterfall: layered translucent ribbons instead of opaque cyan bricks.
+const waterfallStrips=[];
+for(let i=0;i<12;i++){
+ const x=-1.50+(i-5.5)*.091;
+ waterfallStrips.push({x,y:-.97-random(-.08,.09),z:5.12,length:random(2.05,2.88),phase:random(0,6.28)});
+}
+// Mossy ledges and irregular roots near the island edge.
+for(let i=0;i<125;i++){
+ let x=random(-4.8,4.8),z=random(-4.8,4.8);
+ if(rnd()<.45){x=(rnd()<.5?-1:1)*random(4.4,5.04);}else{z=(rnd()<.5?-1:1)*random(4.4,5.04);}
+ const y=random(-.2,.26);
+ if(waterDist(x,z)>.4)box(x,y,z,random(.10,.23),random(.16,.34),random(.10,.23),choice(palette.green));
+}
+// Tree roots: angular, wine-dark cubes at the foot of the trunk.
+for(const [x,z,w,d] of [[0,0,1.24,1.12],[-.72,.42,.9,.46],[.8,.37,.82,.37],[.36,-.75,.47,.8],[-.48,-.67,.63,.61]]){
+ box(x,.35,z,w,.45,d,choice(palette.wood));
+}
+for(let n=0;n<18;n++){
+ const theta=n*Math.PI*2/18,rad=random(.7,1.52);
+ box(Math.sin(theta)*rad,.24,Math.cos(theta)*rad,random(.23,.47),random(.24,.39),random(.26,.45),choice(palette.wood));
+}
+// Stepped chunky trunk; red and burgundy faces feel hand-built.
+const trunk=[
+ [.02,.8,-.05,1.06,1.28,1.05],
+ [.12,1.65,-.08,.89,1.0,.9],
+ [-.09,2.40,-.18,.84,.92,.83],
+ [-.33,3.08,-.27,.73,.91,.72],
+ [-.17,3.81,-.35,.76,.89,.72],
+ [.08,4.43,-.42,.62,.68,.64],
+];
+trunk.forEach(([x,y,z,w,h,d],i)=>{
+ if(i===1){
+   // A *real* through-opening (nothing behind the hole): build four surrounding
+   // rectangular beams instead of drawing a cyan tile on the bark.
+   const minX=x-w/2,maxX=x+w/2,minY=y-h/2,maxY=y+h/2;
+   const holeL=-.13,holeR=.18,holeB=1.51,holeT=1.89;
+   const woodA=palette.wood[1],woodB=palette.wood[2];
+   box((minX+holeL)/2,y,z,holeL-minX,h,d,woodA); // left pier
+   box((holeR+maxX)/2,y,z,maxX-holeR,h,d,woodB); // right pier
+   box((holeL+holeR)/2,(minY+holeB)/2,z,holeR-holeL,holeB-minY,d,woodB); // sill
+   box((holeL+holeR)/2,(holeT+maxY)/2,z,holeR-holeL,maxY-holeT,d,woodA); // lintel
+   // Thin highlights on the carved inner wall reinforce that this is a cutout.
+   box(holeL-.026,(holeB+holeT)/2,z+d*.12,.052,holeT-holeB,d*.58,'#401520');
+   box(holeR+.024,(holeB+holeT)/2,z-d*.12,.048,holeT-holeB,d*.55,'#752630');
+ } else box(x,y,z,w,h,d,palette.wood[i%palette.wood.length]);
+ if(i<4 && i!==1)box(x+w*.25,y+.02,z+d*.48,w*.25,h*.7,.085,'#9b3027');
+});
+// The cavity remains empty in all viewing directions: pond and distant
+// scenery are visible through the trunk rather than a turquoise inserted tile.
+// A small doorstep, the sort of miniature detail one finds by orbiting the scene.
+box(.07,.40,.79,.60,.16,.33,'#92502d');
+// Branch structures radiate into the canopy.
+const branchPaths=[
+ [[-.2,3.0,-.25],[-.9,3.48,-.38],[-1.55,3.98,-.4],[-2.2,4.42,-.5]],
+ [[.1,3.28,-.2],[.8,3.70,.1],[1.58,4.03,.35],[2.24,4.40,.32]],
+ [[-.15,3.55,-.35],[-.65,4.07,-1.0],[-1.02,4.50,-1.38]],
+ [[.0,3.9,-.4],[.4,4.5,-.86],[.75,5.03,-1.22]],
+ [[.0,3.32,-.2],[.65,3.65,.75],[1.12,4.07,1.12]]
+];
+for(let p=0;p<branchPaths.length;p++){
+ const path=branchPaths[p];
+ for(let i=1;i<path.length;i++){
+ const a=path[i-1],b=path[i], mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,mz=(a[2]+b[2])/2;
+ box(mx,my,mz,Math.abs(a[0]-b[0])+.38,Math.abs(a[1]-b[1])+.30,Math.abs(a[2]-b[2])+.33,choice(palette.wood));
+ }
+}
+// Broad, tiered orange voxel crown, composed of offset terraces.
+const lobes=[
+ {x:-1.88,z:-.06,y:4.25,rx:2.6,rz:1.97,levels:6},
+ {x:-.18,z:-1.03,y:5.02,rx:2.60,rz:2.09,levels:7},
+ {x:2.12,z:.23,y:4.12,rx:2.25,rz:1.74,levels:6},
+ {x:.24,z:1.22,y:4.13,rx:2.48,rz:1.75,levels:5},
+ {x:-.36,z:-2.09,y:4.89,rx:1.89,rz:1.45,levels:5},
+ {x:-2.58,z:-1.05,y:4.84,rx:1.37,rz:1.24,levels:4}
+];
+// Record real foliage attachment points so each hanging strand touches a leaf cube.
+const canopyCell=.43;
+const hangingAnchors=[];
+for(let li=0;li<lobes.length;li++){
+ const L=lobes[li];
+ for(let layer=0;layer<L.levels;layer++){
+   const t=layer/(L.levels-1);
+   const radScale=[.79,1.00,.98,.88,.74,.56,.37][layer];
+   const xDrift=.10*Math.sin(layer*1.6+li), zDrift=.07*Math.cos(layer*.96+li);
+   for(let a=-Math.ceil(L.rx/canopyCell)-1;a<=Math.ceil(L.rx/canopyCell)+1;a++){
+     for(let b=-Math.ceil(L.rz/canopyCell)-1;b<=Math.ceil(L.rz/canopyCell)+1;b++){
+       const x=L.x+a*canopyCell, z=L.z+b*canopyCell;
+       const dx=(a*canopyCell-xDrift)/(L.rx*radScale),dz=(b*canopyCell-zDrift)/(L.rz*radScale);
+       const r=dx*dx+dz*dz;
+       const edgeJitter=.12*Math.sin(a*2.7+b*1.8+li*2)+.10*(rnd()-.5);
+       if(r>1+edgeJitter || (r>.78 && rnd()<.10))continue;
+       let pal=layer<=1?'leafBottom':layer<=3?'leafMiddle':layer<=5?'leafUpper':'leafTop';
+       if(rnd()<.15)pal=layer>=4?'leafTop':'leafUpper';
+       const y=L.y+layer*.325;
+       const leafWidth=canopyCell*random(.98,1.10);
+       const leafHeight=random(.30,.36);
+       const leafDepth=canopyCell*random(.98,1.10);
+       box(x,y,z,leafWidth,leafHeight,leafDepth,choice(palette[pal]));
+       // The overhanging second tier has an exposed underside at its outer edge.
+       // Anchor the strands to the *actual* underside, not an estimated crown outline.
+       if(layer===1 && r>.58 && r<1.02 && ((a*13+b*19+li*11+10000)%17)<16){
+         hangingAnchors.push({x,z,underside:y-leafHeight/2,lobeY:L.y});
+       }
+       if(layer===L.levels-1 && rnd()<.17){
+         box(x+.04,y+.21,z-.04,random(.36,.60),.12,random(.34,.59),choice(palette.leafTop));
+       }
+     }
+   }
+ }
+}
+// Large bright cap tiles make the crown read as layered voxel slabs.
+for(let k=0;k<60;k++){
+ const l=choice(lobes),a=random(0,Math.PI*2),r=Math.sqrt(rnd())*.73;
+ const x=l.x+Math.cos(a)*l.rx*r,z=l.z+Math.sin(a)*l.rz*r;
+ const y=l.y+(l.levels-1)*.325+.21;
+ if(rnd()<.30)box(x,y,z,random(.46,.95),.15,random(.42,.78),choice(palette.leafTop));
+}
+// Dangling orange leaf tassels. Thin, long rectangular stems now physically
+// join every tassel to a leaf block on the underside of the overhanging crown.
+for(let i=hangingAnchors.length-1;i>0;i--){
+ const j=Math.floor(rnd()*(i+1));
+ [hangingAnchors[i],hangingAnchors[j]]=[hangingAnchors[j],hangingAnchors[i]];
+}
+for(const anchor of hangingAnchors.slice(0,108)){
+ const x=anchor.x+random(-.06,.06),z=anchor.z+random(-.06,.06);
+ const tasselTop=anchor.lobeY-random(.29,.43);
+ const leafLength=random(.25,.89),leafY=tasselTop-leafLength/2;
+ const stemTop=anchor.underside+.07,stemBottom=tasselTop-.08;
+ const group=makeSwayGroup(x,anchor.underside+.06,z,'tassel');
+ swayBox(group,x,(stemTop+stemBottom)/2,z,random(.045,.068),stemTop-stemBottom,random(.045,.068),choice(palette.leafMiddle));
+ swayBox(group,x,leafY,z,random(.09,.17),leafLength,random(.10,.17),choice(palette.leafBottom));
+ if(rnd()<.5)swayBox(group,x+.065,leafY-leafLength*.4,z,.15,.16,.16,choice(palette.leafMiddle));
+}
+// Each tuft is a little articulated cluster, swaying from its grounded root.
+for(let k=0;k<560;k++){
+ const g=choice(grid);
+ if(g.water||g.shore&&rnd()<.92)continue;
+ const x=g.x+random(-.14,.14),z=g.z+random(-.14,.14);
+ if(Math.hypot(x,z)<.92)continue;
+ const h=random(.13,.46),group=makeSwayGroup(x,.21,z,'grass');
+ swayBox(group,x,.22+h/2,z,random(.06,.12),h,random(.06,.11),choice(palette.green));
+ if(rnd()<.30)swayBox(group,x+.10,.26+h*.3,z,.07,h*.55,.07,choice(palette.green));
+}
+// Shore reeds are taller and more pliant than the short grass.
+for(let k=0;k<115;k++){
+ const g=choice(grid);
+ if(g.water||g.wd>1.19||g.wd<.63)continue;
+ const x=g.x,z=g.z,h=random(.34,.80),group=makeSwayGroup(x,.22,z,'reed');
+ swayBox(group,x,.22+h/2,z,.07,h,.075,choice(palette.green));
+ swayBox(group,x+.13,.22+h*.55,z,.23,.10,.08,choice(palette.edge));
+ swayBox(group,x-.11,.22+h*.35,z,.22,.09,.08,choice(palette.edge));
+}
+// Wildflowers nod gently without sliding at the soil line.
+for(let k=0;k<94;k++){
+ const g=choice(grid);
+ if(g.water||g.shore||Math.hypot(g.x,g.z)<1.12)continue;
+ const x=g.x+random(-.12,.12),z=g.z+random(-.12,.12),h=random(.16,.35);
+ const group=makeSwayGroup(x,.22,z,'flower');
+ swayBox(group,x,.22+h/2,z,.055,h,.055,'#4a9931');
+ swayBox(group,x,.24+h,z,.145,.13,.14,choice(palette.flower));
+ if(rnd()<.42)swayBox(group,x+.09,.24+h,z,.09,.09,.09,choice(palette.flower));
+}
+// Small rocks near the water and on the banks.
+for(let k=0;k<30;k++){
+ const g=choice(grid);
+ if(g.water||g.wd>1.18||g.wd<.58)continue;
+ box(g.x,.29,g.z,random(.21,.43),random(.13,.28),random(.24,.43),choice(palette.rock));
+}
+    // Higher key-to-fill ratio: brighter sun, deeper occlusion, cleaner shadows.
+    const sun=new THREE.DirectionalLight(0xffdfb0,3.55);
+    sun.position.set(-8,17,11);sun.castShadow=true;
+    sun.shadow.mapSize.set(compactScreen?1280:2560,compactScreen?1280:2560);
+    sun.shadow.camera.left=-12;sun.shadow.camera.right=12;
+    sun.shadow.camera.top=15;sun.shadow.camera.bottom=-13;
+    sun.shadow.camera.near=.5;sun.shadow.camera.far=40;
+    sun.shadow.bias=-.00018;sun.shadow.normalBias=.028;
+    sun.shadow.radius=2.2;sun.target.position.set(0,2.3,0);
+    scene.add(sun,sun.target);
+    const sky=new THREE.HemisphereLight(0xfff1da,0x685971,1.00);scene.add(sky);
+    const bounce=new THREE.DirectionalLight(0xb6e9e7,.36);bounce.position.set(7,5,-10);scene.add(bounce);
+
+    const geometry=new THREE.BoxGeometry(1,1,1);
+    // Keep graphic block-face shading, but allow lights to shape each cube.
+    const normal=geometry.getAttribute('normal');
+    const colors=new Float32Array(normal.count*3);
+    for(let i=0;i<normal.count;i++){
+      const x=normal.getX(i),y=normal.getY(i),z=normal.getZ(i);
+      const c=y>.5?[1,1,1]:y<-.5?[.58,.61,.66]:x>.5?[.90,.86,.81]:x<-.5?[.68,.72,.78]:z>.5?[.92,.88,.82]:[.75,.77,.84];
+      colors[i*3]=c[0];colors[i*3+1]=c[1];colors[i*3+2]=c[2];
+    }
+    geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
+    const material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.96,metalness:0});
+    const temp=new THREE.Object3D();
+    const col=new THREE.Color();
+    function initInstance(mesh,array){
+      for(let i=0;i<array.length;i++){
+        const o=i*9;
+        temp.position.set(array[o],array[o+1],array[o+2]);
+        temp.scale.set(array[o+3],array[o+4],array[o+5]);
+        temp.rotation.set(0,0,0);temp.updateMatrix();mesh.setMatrixAt(i,temp.matrix);
+        col.setRGB(array[o+6],array[o+7],array[o+8],THREE.SRGBColorSpace);mesh.setColorAt(i,col);
+      }
+      mesh.instanceMatrix.needsUpdate=true;
+      if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
+    }
+    const world=new THREE.InstancedMesh(geometry,material,cubes.length/9);
+    world.frustumCulled=false;world.castShadow=true;world.receiveShadow=true;
+    initInstance(world,cubes);scene.add(world);
+
+    // Foliage groups maintain an anchored hinge; InstancedMesh avoids a draw
+    // call for every stem while updating all rotations every animation frame.
+    const swaying=new THREE.InstancedMesh(geometry,material,swayBoxes.length);
+    swaying.frustumCulled=false;swaying.castShadow=true;swaying.receiveShadow=true;
+    swaying.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    for(let i=0;i<swayBoxes.length;i++){
+      const c=swayBoxes[i].c;col.setRGB(c[0],c[1],c[2],THREE.SRGBColorSpace);
+      swaying.setColorAt(i,col);
+    }
+    if(swaying.instanceColor)swaying.instanceColor.needsUpdate=true;
+    scene.add(swaying);
+    const pivot=new THREE.Vector3(), offset=new THREE.Vector3();
+    const windQuat=new THREE.Quaternion();
+    const windEuler=new THREE.Euler();
+    function animateWind(t){
+      for(const g of swayGroups){
+        const pulse=Math.sin(t*.78+g.phase*.28+g.x*.19+g.z*.22);
+        const flutter=Math.sin(t*g.speed*1.7+g.phase)*.26;
+        const strength=g.kind==='grass'?.10:g.kind==='reed'?.115:g.kind==='flower'?.058:.071;
+        const sx=(pulse*.68+flutter)*strength*g.strength;
+        const sz=(Math.sin(t*.67+g.phase+g.z*.26)*.71+flutter*.6)*strength*g.strength;
+        windEuler.set(sx,0,sz);windQuat.setFromEuler(windEuler);
+        pivot.set(g.x,g.y,g.z);
+        for(let j=g.begin;j<g.begin+g.count;j++){
+          const b=swayBoxes[j];offset.set(b.x,b.y,b.z).applyQuaternion(windQuat);
+          temp.position.copy(pivot).add(offset);
+          temp.quaternion.copy(windQuat);temp.scale.set(b.w,b.h,b.d);
+          temp.updateMatrix();swaying.setMatrixAt(j,temp.matrix);
+        }
+      }
+      swaying.instanceMatrix.needsUpdate=true;
+    }
+    animateWind(0);
+
+    // Translucent physical voxel water: cyan depth layer + glossy top layer.
+    // On the surface, a lightweight shader modulates animated highlights
+    // without destroying the distinct square boundaries of each water voxel.
+    const waterMaterial=new THREE.MeshPhysicalMaterial({
+      color:0xc5fcf5,transparent:true,opacity:.81,depthWrite:false,
+      roughness:.16,metalness:.06,clearcoat:1.0,clearcoatRoughness:.09,
+      envMapIntensity:1.0,side:THREE.FrontSide
+    });
+    const waterTime={value:0};
+    waterMaterial.onBeforeCompile=(shader)=>{
+      shader.uniforms.uWaterTime=waterTime;
+      shader.vertexShader=shader.vertexShader.replace('#include <common>',
+        '#include <common>\nvarying vec3 vWaterWorld;\nvarying vec2 vWaterCell;');
+      shader.vertexShader=shader.vertexShader.replace('#include <worldpos_vertex>',
+        '#include <worldpos_vertex>\nvWaterWorld=(modelMatrix * instanceMatrix * vec4(transformed,1.0)).xyz;\nvWaterCell=instanceMatrix[3].xz;');
+      shader.fragmentShader=shader.fragmentShader.replace('#include <common>',
+        '#include <common>\nvarying vec3 vWaterWorld;\nvarying vec2 vWaterCell;\nuniform float uWaterTime;');
+      shader.fragmentShader=shader.fragmentShader.replace('#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        normal=normalize(normal+vec3(
+          .035*sin(vWaterWorld.x*8.5+uWaterTime*1.35),
+          0.0,
+          .035*cos(vWaterWorld.z*8.0-uWaterTime*1.05)
+        ));`);
+      shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',
+        `#include <color_fragment>
+        // Cell-center coordinates make each pixel-art cube one solid hue.
+        // Spatial phase offsets make overlapping bands travel around the tree.
+        float wave1=.5+.5*sin(vWaterCell.x*2.2 + vWaterCell.y*1.35 - uWaterTime*1.65);
+        float wave2=.5+.5*sin(vWaterCell.x*1.1 - vWaterCell.y*2.9 + uWaterTime*1.03);
+        float wave3=.5+.5*cos(length(vWaterCell)*3.3-uWaterTime*1.9);
+        float wave=clamp(wave1*.53+wave2*.29+wave3*.18,0.0,1.0);
+        // A noticeable rolling range of deep teal through luminous turquoise.
+        diffuseColor.rgb*=mix(.61,1.37,wave);
+        diffuseColor.rgb+=vec3(-.028,.045,.071)*wave;
+        // Tight moving glints sit on top of the discrete cell-based waves.
+        float r1=sin(vWaterWorld.x*9.0 + sin(vWaterWorld.z*4.1 + uWaterTime*.68) - uWaterTime*1.65);
+        float r2=cos(vWaterWorld.z*11.5 - vWaterWorld.x*2.7 + uWaterTime*1.21);
+        float shimmer=smoothstep(.68,.99,r1*r2);
+        diffuseColor.rgb+=vec3(.075,.14,.15)*shimmer;`);
+    };
+    waterMaterial.customProgramCacheKey=()=> 'animated-voxel-water-v3-cell-waves';
+    const waterMesh=new THREE.InstancedMesh(geometry,waterMaterial,waterTiles.length);
+    waterMesh.frustumCulled=false;waterMesh.receiveShadow=true;
+    for(let i=0;i<waterTiles.length;i++){
+      const t=waterTiles[i];
+      temp.position.set(t.x,.133,t.z);temp.scale.set(unit*.987,.187,unit*.987);
+      temp.rotation.set(0,0,0);temp.updateMatrix();waterMesh.setMatrixAt(i,temp.matrix);
+      // Stable, visibly varied colors; the shader animates the *brightness*.
+      const swatches=['#0f819e','#1b9db1','#2fc4c4','#57d9ca','#169ab4','#47c9dc','#75dfd0','#117f91'];
+      col.set(choice(swatches));waterMesh.setColorAt(i,col);
+    }
+    waterMesh.instanceMatrix.needsUpdate=true;waterMesh.instanceColor.needsUpdate=true;
+    waterMesh.renderOrder=2;scene.add(waterMesh);
+
+    // Tiny reflective dashes drift across selected water tiles and hint at
+    // changing surface normals. Their motion stays inside each voxel cell.
+    const rippleMat=new THREE.MeshBasicMaterial({color:0xd4ffff,transparent:true,opacity:.39,depthWrite:false});
+    const rippleData=[];
+    for(let i=0;i<Math.min(220,waterTiles.length);i++){
+      const t=waterTiles[Math.floor(rnd()*waterTiles.length)];
+      rippleData.push({x:t.x,z:t.z,phase:random(0,6.283),speed:random(.35,.84),w:random(.065,.21)});
+    }
+    const ripples=new THREE.InstancedMesh(geometry,rippleMat,rippleData.length);
+    ripples.frustumCulled=false;ripples.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    ripples.renderOrder=3;scene.add(ripples);
+
+    const fallsMat=new THREE.MeshPhysicalMaterial({color:0x4de5e9,transparent:true,opacity:.69,
+      roughness:.12,metalness:.08,clearcoat:1,clearcoatRoughness:.08,depthWrite:false});
+    const waterfall=new THREE.InstancedMesh(geometry,fallsMat,waterfallStrips.length);
+    waterfall.frustumCulled=false;waterfall.renderOrder=2;
+    waterfall.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    waterfallStrips.forEach((w,i)=>{
+      temp.position.set(w.x,w.y,w.z);temp.scale.set(.080,w.length,.090);
+      temp.rotation.set(0,0,0);temp.updateMatrix();waterfall.setMatrixAt(i,temp.matrix);
+      col.setHSL(.49+random(-.015,.015),.67,random(.43,.66));waterfall.setColorAt(i,col);
+    });
+    waterfall.instanceMatrix.needsUpdate=true;waterfall.instanceColor.needsUpdate=true;
+    scene.add(waterfall);
+    const sprayMat=new THREE.MeshBasicMaterial({color:0xb8fbf4,transparent:true,opacity:.66,depthWrite:false});
+    const sprays=[];
+    for(let i=0;i<23;i++){
+      const obj=new THREE.Mesh(geometry,sprayMat);
+      obj.scale.set(random(.025,.058),random(.10,.30),.037);
+      scene.add(obj);sprays.push({obj,x:random(-1.93,-.98),z:5.19,phase:random(0,2.8),speed:random(.65,1.4)});
+    }
+
+    const moving=[];
+    for(let i=0;i<72;i++){
+      const l=choice(lobes),a=random(0,Math.PI*2),r=random(.2,1);
+      moving.push({x:l.x+Math.cos(a)*l.rx*r,y:random(.5,7.15),z:l.z+Math.sin(a)*l.rz*r,
+        phase:random(0,Math.PI*2),speed:random(.16,.52),s:random(.075,.16),color:choice(palette.leafUpper)});
+    }
+    const falling=new THREE.InstancedMesh(geometry,material,moving.length);
+    falling.frustumCulled=false;falling.castShadow=true;
+    falling.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    for(let i=0;i<moving.length;i++){
+      const l=moving[i];col.setRGB(l.color[0],l.color[1],l.color[2],THREE.SRGBColorSpace);
+      falling.setColorAt(i,col);
+    }
+    if(falling.instanceColor)falling.instanceColor.needsUpdate=true;
+    scene.add(falling);
+
+    // Camera-following TILT-SHIFT (miniature photography), not physical DOF.
+    // Two separable 9-tap Gaussian passes are performed in *linear* HDR space;
+    // the final pass alone tone-maps and converts to sRGB. A real backdrop fills
+    // the scene render target, so there are no black/transparent fringe pixels.
+    // On devices without renderable HDR attachments, gracefully use an LDR
+    // target and move tone mapping to the first pass instead.
+    const hdrSupported=renderer.extensions.has('EXT_color_buffer_float');
+    const makeTarget=(depth=false)=>new THREE.WebGLRenderTarget(1,1,{
+      minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,
+      format:THREE.RGBAFormat,type:hdrSupported?THREE.HalfFloatType:THREE.UnsignedByteType,
+      depthBuffer:depth,stencilBuffer:false,colorSpace:THREE.LinearSRGBColorSpace
+    });
+    const sceneTarget=makeTarget(true), horizontalTarget=makeTarget(false);
+    const blurVertex=`varying vec2 vUv;
+      void main(){vUv=uv;gl_Position=vec4(position.xy,0.0,1.0);}`;
+    const makeBlurFragment=(finalOutput)=>`uniform sampler2D tColor;
+      uniform vec2 uResolution,uDirection;
+      uniform float uFocusY,uStrength,uSpread;
+      varying vec2 vUv;
+      void main(){
+        vec4 pixel=texture2D(tColor,vUv);
+        // A sharply focused horizontal strip, softly feathering into blur.
+        // The centre is projected from the tree each frame, not fixed in world Z.
+        float distanceToBand=abs(vUv.y-uFocusY);
+        float amount=smoothstep(.115,.425,distanceToBand)*uStrength;
+        vec3 color=pixel.rgb;
+        if(amount>.003){
+          vec2 offset=uDirection*(uSpread*amount)/uResolution;
+          color=pixel.rgb*.2270270270;
+          color+=(texture2D(tColor,clamp(vUv+offset,vec2(0.0),vec2(1.0))).rgb+
+                  texture2D(tColor,clamp(vUv-offset,vec2(0.0),vec2(1.0))).rgb)*.1945945946;
+          color+=(texture2D(tColor,clamp(vUv+offset*2.0,vec2(0.0),vec2(1.0))).rgb+
+                  texture2D(tColor,clamp(vUv-offset*2.0,vec2(0.0),vec2(1.0))).rgb)*.1216216216;
+          color+=(texture2D(tColor,clamp(vUv+offset*3.0,vec2(0.0),vec2(1.0))).rgb+
+                  texture2D(tColor,clamp(vUv-offset*3.0,vec2(0.0),vec2(1.0))).rgb)*.0540540541;
+          color+=(texture2D(tColor,clamp(vUv+offset*4.0,vec2(0.0),vec2(1.0))).rgb+
+                  texture2D(tColor,clamp(vUv-offset*4.0,vec2(0.0),vec2(1.0))).rgb)*.0162162162;
+        }
+        gl_FragColor=vec4(color,1.0);
+        ${finalOutput?'#include <tonemapping_fragment>\n#include <colorspace_fragment>':''}
+      }`;
+    function blurMaterial(input,horizontal,finalOutput){
+      return new THREE.ShaderMaterial({
+        uniforms:{tColor:{value:input},uResolution:{value:new THREE.Vector2(1,1)},
+          uDirection:{value:new THREE.Vector2(horizontal?1:0,horizontal?0:1)},
+          uFocusY:{value:.52},uStrength:{value:1},uSpread:{value:3.3}},
+        vertexShader:blurVertex,fragmentShader:makeBlurFragment(finalOutput),
+        depthTest:false,depthWrite:false,transparent:false,toneMapped:finalOutput
+      });
+    }
+    const horizontalMat=blurMaterial(sceneTarget.texture,true,false);
+    const verticalMat=blurMaterial(horizontalTarget.texture,false,true);
+    verticalMat.toneMapped=hdrSupported;
+    const postScene=new THREE.Scene();
+    const postCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+    const postQuad=new THREE.Mesh(new THREE.PlaneGeometry(2,2),verticalMat);
+    postQuad.frustumCulled=false;postScene.add(postQuad);
+    let dofOn=true;
+    const focusPoint=new THREE.Vector3(0,2.85,0);
+    const projectedFocus=new THREE.Vector3();
+    function updateTiltFocus(){
+      // Recalculate the sharp band as camera orbits / zooms around the tree.
+      projectedFocus.copy(focusPoint).project(camera);
+      const y=clamp(.5+.5*projectedFocus.y,.32,.68);
+      horizontalMat.uniforms.uFocusY.value=y;
+      verticalMat.uniforms.uFocusY.value=y;
+    }
+    function renderWithTiltShift(){
+      const toneMapping=renderer.toneMapping;
+      // Avoid tone mapping *twice*: retain high-precision scene radiance in the
+      // half-float target, then tone map exactly once on the final fullscreen pass.
+      renderer.toneMapping=hdrSupported?THREE.NoToneMapping:toneMapping;
+      renderer.setRenderTarget(sceneTarget);
+      renderer.render(scene,camera);
+      if(dofOn){
+        horizontalMat.uniforms.uStrength.value=1;
+        verticalMat.uniforms.uStrength.value=1;
+        renderer.setRenderTarget(horizontalTarget);
+        postQuad.material=horizontalMat;
+        renderer.render(postScene,postCam);
+        verticalMat.uniforms.tColor.value=horizontalTarget.texture;
+      }else{
+        // Exact same HDR-to-display path without blur: no brightness jump.
+        verticalMat.uniforms.uStrength.value=0;
+        verticalMat.uniforms.tColor.value=sceneTarget.texture;
+      }
+      renderer.toneMapping=hdrSupported?toneMapping:THREE.NoToneMapping;
+      renderer.setRenderTarget(null);
+      postQuad.material=verticalMat;
+      renderer.render(postScene,postCam);
+    }
+    const stars=document.getElementById('stars');
+    for(let i=0;i<34;i++){
+      const dot=document.createElement('i');dot.style.left=`${(i*63.71+11)%100}%`;
+      dot.style.top=`${(i*29.37+7)%75}%`;dot.style.opacity=String(.2+(i%5)*.12);
+      stars.appendChild(dot);
+    }
+    // Solar clock: a full 24-hour loop with dynamic sunlight direction, shadow
+    // length, sky gradient, ambient lighting, water highlights and star opacity.
+    // Sunrise ~06:00 / sunset ~18:00. All values interpolate, no day/night jump.
+    const solarStops=[
+      {h:0,   bg:['#3d425f','#282f4a','#1e243d'],sun:'#829bd3',sunI:0,hemi:'#829cc9',ground:'#303852',hemiI:.31,bounce:.16,exposure:1.14},
+      {h:4.8, bg:['#55526d','#393d58','#262b45'],sun:'#f8a66b',sunI:0,hemi:'#ad9bbc',ground:'#544157',hemiI:.38,bounce:.20,exposure:1.15},
+      {h:6,   bg:['#fac9ab','#bf98a7','#777e9b'],sun:'#ffac68',sunI:.27,hemi:'#f4c8b1',ground:'#805b69',hemiI:.63,bounce:.22,exposure:1.18},
+      {h:7.5, bg:['#ffe5ca','#ead4c7','#d3b8b4'],sun:'#ffc586',sunI:2.40,hemi:'#ffe5cc',ground:'#796575',hemiI:.83,bounce:.30,exposure:1.20},
+      {h:10,  bg:['#f5e8db','#ecd9cd','#e4cdbf'],sun:'#ffdfb0',sunI:3.55,hemi:'#fff1da',ground:'#685971',hemiI:1.00,bounce:.36,exposure:1.25},
+      {h:12,  bg:['#f5ebde','#eadbd0','#e3d2c4'],sun:'#fff0cc',sunI:3.86,hemi:'#fcf1dd',ground:'#686879',hemiI:1.08,bounce:.39,exposure:1.24},
+      {h:15.5,bg:['#f9e0c9','#e9c7b9','#dcc0ad'],sun:'#ffd09a',sunI:3.12,hemi:'#ffe2c8',ground:'#776071',hemiI:.92,bounce:.31,exposure:1.23},
+      {h:17.5,bg:['#ffcb9e','#db9a91','#a48491'],sun:'#ff9b55',sunI:1.34,hemi:'#ffd3b1',ground:'#75566a',hemiI:.71,bounce:.25,exposure:1.20},
+      {h:18,  bg:['#eeaa96','#ac7d8f','#656b8a'],sun:'#ff8e56',sunI:.24,hemi:'#e9b6aa',ground:'#664e6e',hemiI:.58,bounce:.22,exposure:1.18},
+      {h:19.5,bg:['#6f627c','#474964','#292f4c'],sun:'#819cd5',sunI:0,hemi:'#a8acd3',ground:'#45405c',hemiI:.37,bounce:.19,exposure:1.15},
+      {h:21,  bg:['#424762','#2d3450','#1e253e'],sun:'#809cde',sunI:0,hemi:'#99b0e3',ground:'#354067',hemiI:.32,bounce:.18,exposure:1.14},
+      {h:24,  bg:['#3d425f','#282f4a','#1e243d'],sun:'#829bd3',sunI:0,hemi:'#829cc9',ground:'#303852',hemiI:.31,bounce:.16,exposure:1.14}
+    ].map(s=>({...s,bg:s.bg.map(c=>new THREE.Color(c)),sun:new THREE.Color(s.sun),hemi:new THREE.Color(s.hemi),ground:new THREE.Color(s.ground)}));
+    const interpolateColor=(out,a,b,t)=>out.copy(a).lerp(b,t);
+    const bgCenter=new THREE.Color(),bgMiddle=new THREE.Color(),bgEdge=new THREE.Color();
+    let timeHours=9.5,cyclePlaying=!window.matchMedia('(prefers-reduced-motion:reduce)').matches,lastSkyHours=-100;
+    const timeDial=document.getElementById('timeDial');
+    const timeArc=document.getElementById('timeArc');
+    const timeKnob=document.getElementById('timeKnob');
+    const ringCircumference=2*Math.PI*69;
+    const timeClock=document.getElementById('timeClock');
+    const timeIcon=document.getElementById('timeIcon');
+    const timePlayBtn=document.getElementById('timePlayBtn');
+    const nightLabel=document.getElementById('nightLabel');
+    const formatClock=(h)=>{const m=(Math.round(h*60)+1440)%1440;return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;};
+    function describeHour(h){
+      if(h<5.5)return ['深夜 · 月光','🌙'];
+      if(h<7.5)return ['日出 · 金色晨曦','🌅'];
+      if(h<11)return ['上午 · 柔和日光','☀️'];
+      if(h<14)return ['正午 · 明亮阳光','☀️'];
+      if(h<17.5)return ['午后 · 温暖斜阳','🌤️'];
+      if(h<19)return ['日落 · 橙红余晖','🌇'];
+      return ['夜晚 · 静谧月色','🌙'];
+    }
+    function updatePlayButton(){
+      timePlayBtn.textContent=cyclePlaying?'Ⅱ 暂停':'▶ 继续';
+      timePlayBtn.setAttribute('aria-pressed',String(cyclePlaying));
+    }
+    function applySolarCycle(forceSky=false){
+      const hour=(timeHours%24+24)%24;
+      let a=solarStops[0],b=solarStops[1];
+      for(let i=1;i<solarStops.length;i++) if(hour<solarStops[i].h){a=solarStops[i-1];b=solarStops[i];break;}
+      const f=THREE.MathUtils.smoothstep(hour,a.h,b.h);
+      const lerp=(key)=>THREE.MathUtils.lerp(a[key],b[key],f);
+      const theta=(hour-6)*Math.PI/12;
+      const elevation=Math.sin(theta);
+      // East at sunrise, high noon above the tree, west at sunset.
+      sun.position.set(-Math.cos(theta)*22,3.0+Math.max(0,elevation)*22.0,8+Math.max(0,elevation)*4);
+      sun.intensity=lerp('sunI');
+      interpolateColor(sun.color,a.sun,b.sun,f);
+      interpolateColor(sky.color,a.hemi,b.hemi,f);
+      interpolateColor(sky.groundColor,a.ground,b.ground,f);
+      sky.intensity=lerp('hemiI');
+      bounce.intensity=lerp('bounce');
+      renderer.toneMappingExposure=lerp('exposure');
+      // Slow pre-dawn / post-sunset visual changes remain smooth while we
+      // avoid uploading a canvas texture on every animation frame.
+      if(forceSky||Math.abs(hour-lastSkyHours)>=.025||hour<lastSkyHours){
+        interpolateColor(bgCenter,a.bg[0],b.bg[0],f);
+        interpolateColor(bgMiddle,a.bg[1],b.bg[1],f);
+        interpolateColor(bgEdge,a.bg[2],b.bg[2],f);
+        paintBackdrop(bgCenter,bgMiddle,bgEdge);lastSkyHours=hour;
+      }
+      // Change the subtle UI/stars with sun position, not a hard-coded switch.
+      const darkBlend=1-THREE.MathUtils.smoothstep(elevation,-.12,.16);
+      stars.style.opacity=String(darkBlend*.94);
+      waterMaterial.color.set(0xc5fcf5).lerp(new THREE.Color(0x8cb7d2),darkBlend*.70);
+      rippleMat.color.set(0xd4ffff).lerp(new THREE.Color(0x92c7ea),darkBlend*.50);
+      sprayMat.color.set(0xb8fbf4).lerp(new THREE.Color(0x7bc7eb),darkBlend*.55);
+      const isNight=hour>=19||hour<5.5;
+      document.body.classList.toggle('night',isNight);
+      toggle(nightBtn,isNight);nightLabel.textContent=isNight?'跳至白天':'跳至夜晚';
+      const [phase,icon]=describeHour(hour);
+      timeIcon.textContent=icon;
+      timeClock.textContent=formatClock(hour);
+      const portion=hour/24,angle=portion*2*Math.PI;
+      timeArc.setAttribute('stroke-dasharray',`${Math.max(0.0001,portion*ringCircumference)} ${ringCircumference}`);
+      timeKnob.setAttribute('cx',String(90+69*Math.sin(angle)));
+      timeKnob.setAttribute('cy',String(90-69*Math.cos(angle)));
+      timeDial.setAttribute('aria-valuenow',String(Math.round(hour*60)));
+      timeDial.setAttribute('aria-valuetext',`${formatClock(hour)} ${phase}`);
+      timeDial.style.setProperty('--ring-color',hour>=19||hour<5.5?'#aabbe4':hour<7.5||hour>=17?'#ee976b':'#e99657');
+    }
+    // Pointer movement across the dial maps to 00:00 (top), 06:00 (right),
+    // 12:00 (bottom) and 18:00 (left). Support mouse, stylus and touch.
+    let draggingDial=false,dragPointerId=null;
+    function setDialMinutes(minute){
+      cyclePlaying=false;updatePlayButton();
+      const next=((Math.round(minute)%1440)+1440)%1440;
+      timeHours=next/60;
+      applySolarCycle(true);
+    }
+    function readPointerTime(e){
+      const rect=timeDial.getBoundingClientRect();
+      const dx=e.clientX-(rect.left+rect.width/2),dy=e.clientY-(rect.top+rect.height/2);
+      const angle=(Math.atan2(dx,-dy)+Math.PI*2)%(Math.PI*2);
+      return Math.round(angle/(Math.PI*2)*1440)%1440;
+    }
+    timeDial.addEventListener('pointerdown',e=>{
+      if(e.button!==0)return;
+      const rect=timeDial.getBoundingClientRect();
+      const dx=e.clientX-(rect.left+rect.width/2),dy=e.clientY-(rect.top+rect.height/2);
+      const dist=Math.hypot(dx,dy)/rect.width;
+      // Only the circular track responds: the center remains a clear readout.
+      if(dist<.245||dist>.55)return;
+      e.preventDefault();timeDial.focus({preventScroll:true});
+      draggingDial=true;dragPointerId=e.pointerId;
+      timeDial.setPointerCapture(e.pointerId);
+      setDialMinutes(readPointerTime(e));
+    });
+    timeDial.addEventListener('pointermove',e=>{
+      if(draggingDial&&e.pointerId===dragPointerId)setDialMinutes(readPointerTime(e));
+    });
+    function stopDialDrag(e){
+      if(e.pointerId===dragPointerId){draggingDial=false;dragPointerId=null;}
+    }
+    timeDial.addEventListener('pointerup',stopDialDrag);
+    timeDial.addEventListener('pointercancel',stopDialDrag);
+    // Keyboard alternative to drag, including precise minute adjustments.
+    timeDial.addEventListener('keydown',e=>{
+      let next=Math.round(timeHours*60);
+      if(e.key==='ArrowRight'||e.key==='ArrowUp')next+=e.shiftKey?1:5;
+      else if(e.key==='ArrowLeft'||e.key==='ArrowDown')next-=e.shiftKey?1:5;
+      else if(e.key==='PageUp')next+=30;
+      else if(e.key==='PageDown')next-=30;
+      else if(e.key==='Home')next=0;
+      else if(e.key==='End')next=1439;
+      else return;
+      e.preventDefault();setDialMinutes(next);
+    });
+    timePlayBtn.addEventListener('click',()=>{cyclePlaying=!cyclePlaying;updatePlayButton();});
+    updatePlayButton();
+    const rotateBtn=document.getElementById('rotateBtn');
+    const leafBtn=document.getElementById('leafBtn');
+    const nightBtn=document.getElementById('nightBtn');
+    const dofBtn=document.getElementById('dofBtn');
+    const resetBtn=document.getElementById('resetBtn');
+    const prefersReduced=window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    let leavesOn=!prefersReduced;
+    const toggle=(button,on)=>{button.classList.toggle('active',on);button.setAttribute('aria-pressed',String(on));};
+    toggle(leafBtn,leavesOn);falling.visible=leavesOn;
+    if(prefersReduced){dofOn=false;toggle(dofBtn,false);}
+    rotateBtn.addEventListener('click',()=>{controls.autoRotate=!controls.autoRotate;controls.autoRotateSpeed=.75;toggle(rotateBtn,controls.autoRotate);});
+    leafBtn.addEventListener('click',()=>{leavesOn=!leavesOn;falling.visible=leavesOn;toggle(leafBtn,leavesOn);});
+    dofBtn.addEventListener('click',()=>{dofOn=!dofOn;toggle(dofBtn,dofOn);});
+    nightBtn.addEventListener('click',()=>{
+      const h=(timeHours%24+24)%24;
+      const isNight=h>=19||h<5.5;
+      cyclePlaying=false;updatePlayButton();
+      timeHours=isNight?10:22;
+      applySolarCycle(true);
+    });
+    applySolarCycle(true);
+    function frameCamera(){
+      const aspect=window.innerWidth/window.innerHeight;
+      camera.aspect=aspect;
+      // Preserve framing on tall screens without cropping the canopy.
+      camera.fov=aspect<.75?46:aspect<1.05?40:35;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth,window.innerHeight,false);
+      const drawSize=renderer.getDrawingBufferSize(new THREE.Vector2());
+      sceneTarget.setSize(drawSize.x,drawSize.y);
+      horizontalTarget.setSize(drawSize.x,drawSize.y);
+      horizontalMat.uniforms.uResolution.value.copy(drawSize);
+      verticalMat.uniforms.uResolution.value.copy(drawSize);
+      const nextY=window.innerWidth<590?2.9:2.55;
+      const shift=nextY-controls.target.y;
+      camera.position.y+=shift;controls.target.y=nextY;
+      controls.update();
+    }
+    frameCamera();window.addEventListener('resize',frameCamera);
+    resetBtn.addEventListener('click',()=>{
+      controls.autoRotate=false;toggle(rotateBtn,false);
+      const t=new THREE.Vector3(0,window.innerWidth<590?2.9:2.55,0);
+      controls.target.copy(t);camera.position.copy(t).add(initialOffset);
+      controls.update();
+    });
+    canvas.addEventListener('keydown',e=>{
+      if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
+        const angle=e.key==='ArrowLeft'?.15:-.15;
+        camera.position.sub(controls.target).applyAxisAngle(new THREE.Vector3(0,1,0),angle).add(controls.target);
+      }else if(e.key==='+'||e.key==='='){
+        camera.position.sub(controls.target).multiplyScalar(.9).add(controls.target);
+      }else if(e.key==='-'){
+        camera.position.sub(controls.target).multiplyScalar(1.1).add(controls.target);
+      }else return;
+      controls.update();e.preventDefault();
+    });
+    let previous=performance.now(),elapsed=0;
+    renderer.setAnimationLoop((now)=>{
+      const dt=Math.min(.05,Math.max(0,(now-previous)/1000));previous=now;elapsed+=dt;
+      controls.update();
+      if(cyclePlaying){
+        // A full 24-hour cycle takes two real minutes; it loops at midnight.
+        timeHours=(timeHours+dt*24/120)%24;
+        applySolarCycle();
+      }
+      const t=prefersReduced?0:elapsed;
+      if(!prefersReduced)animateWind(t);
+      waterTime.value=t;
+      for(let i=0;i<rippleData.length;i++){
+        const r=rippleData[i];
+        temp.position.set(r.x+Math.sin(t*r.speed+r.phase)*.035,.236+Math.sin(t*1.3+r.phase)*.004,
+          r.z+Math.cos(t*r.speed*.62+r.phase)*.031);
+        temp.rotation.set(0,Math.sin(t*.27+r.phase)*.30,0);
+        temp.scale.set(r.w,.007,.018);
+        temp.updateMatrix();ripples.setMatrixAt(i,temp.matrix);
+      }
+      ripples.instanceMatrix.needsUpdate=true;
+      for(let i=0;i<waterfallStrips.length;i++){
+        const w=waterfallStrips[i];
+        temp.position.set(w.x,w.y+Math.sin(t*1.7+w.phase)*.028,w.z);
+        temp.rotation.set(0,0,0);temp.scale.set(.079,w.length,.09);
+        temp.updateMatrix();waterfall.setMatrixAt(i,temp.matrix);
+      }
+      waterfall.instanceMatrix.needsUpdate=true;
+      for(const s of sprays){
+        const cycle=(t*s.speed+s.phase)%2.85;
+        s.obj.position.set(s.x+Math.sin(t*.75+s.phase)*.04,.21-cycle, s.z+.017);
+      }
+      if(leavesOn){
+        for(let i=0;i<moving.length;i++){
+          const l=moving[i],fall=((l.y-t*l.speed+164)%8.2)-.35;
+          temp.position.set(l.x+Math.sin(t*.76+l.phase)*.42,fall,l.z+Math.cos(t*.6+l.phase)*.3);
+          temp.rotation.set(t*.57+l.phase,t*.9+l.phase,t*.3);
+          temp.scale.set(l.s,l.s*.49,l.s*.81);
+          temp.updateMatrix();falling.setMatrixAt(i,temp.matrix);
+        }
+        falling.instanceMatrix.needsUpdate=true;
+      }
+      updateTiltFocus();
+      renderWithTiltShift();
+      if(!window.__voxelReady){window.__voxelReady=true;loading.classList.add('off');setTimeout(()=>loading.remove(),600);}
+    });
+  </script>
+</body>
+</html>
