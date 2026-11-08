@@ -47,7 +47,7 @@
     @media(prefers-reduced-motion:reduce){button{transition:none}body{transition:none}}
   </style>
   <script type="importmap">
-  {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}
+  {"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/addons/"}}
   </script>
 </head>
 <body>
@@ -77,9 +77,9 @@
   <div class="footer-hint"><div class="hint-icon">↔</div><div><strong>探索这座小岛</strong>鼠标拖拽旋转 · 滚轮缩放</div></div>
   <div class="loading" id="loading">正在搭建方块世界…</div>
   <script>
-    // Show a helpful message if the Three.js CDN cannot be reached.
+    // Three.js is bundled locally, so this only fires if the files failed to load.
     window.__voxelReady = false;
-    setTimeout(()=>{if(!window.__voxelReady){const l=document.getElementById('loading');l.classList.add('error');l.textContent='Three.js 加载失败。请连接网络后刷新页面（本演示通过 CDN 加载 Three.js）。';}},9000);
+    setTimeout(()=>{if(!window.__voxelReady){const l=document.getElementById('loading');l.classList.add('error');l.textContent='Three.js 资源加载失败。请刷新页面重试（three.js 已随站点离线打包）。';}},9000);
   </script>
   <script type="module">
     import * as THREE from 'three';
@@ -756,8 +756,11 @@ for(let k=0;k<30;k++){
     // Pointer movement across the dial maps to 00:00 (top), 06:00 (right),
     // 12:00 (bottom) and 18:00 (left). Support mouse, stylus and touch.
     let draggingDial=false,dragPointerId=null;
-    function setDialMinutes(minute){
-      cyclePlaying=false;updatePlayButton();
+    // Dragging the ring only moves the time of day: it leaves the day/night
+    // cycle running instead of silently pausing it. Keyboard nudges keep the
+    // pause so a precise minute can be dialled in without drifting.
+    function setDialMinutes(minute,pausePlayback=false){
+      if(pausePlayback){cyclePlaying=false;updatePlayButton();}
       const next=((Math.round(minute)%1440)+1440)%1440;
       timeHours=next/60;
       applySolarCycle(true);
@@ -798,7 +801,7 @@ for(let k=0;k<30;k++){
       else if(e.key==='Home')next=0;
       else if(e.key==='End')next=1439;
       else return;
-      e.preventDefault();setDialMinutes(next);
+      e.preventDefault();setDialMinutes(next,true);
     });
     timePlayBtn.addEventListener('click',()=>{cyclePlaying=!cyclePlaying;updatePlayButton();});
     updatePlayButton();
@@ -862,7 +865,9 @@ for(let k=0;k<30;k++){
     renderer.setAnimationLoop((now)=>{
       const dt=Math.min(.05,Math.max(0,(now-previous)/1000));previous=now;elapsed+=dt;
       controls.update();
-      if(cyclePlaying){
+      // Freeze advancement only while the ring is held, so the knob tracks the
+      // finger; releasing it resumes the cycle from wherever it was dropped.
+      if(cyclePlaying&&!draggingDial){
         // A full 24-hour cycle takes two real minutes; it loops at midnight.
         timeHours=(timeHours+dt*24/120)%24;
         applySolarCycle();
